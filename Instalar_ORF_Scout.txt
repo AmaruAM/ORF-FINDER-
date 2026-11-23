@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Instalación en Linux o Google Cloud Shell. Copia esta línea completa en tu terminal:
+# wget -O Instalar_ORF_Scout.txt https://raw.githubusercontent.com/AmaruAM/ORF-FINDER-/main/Instalar_ORF_Scout.txt && bash Instalar_ORF_Scout.txt
+set -euo pipefail
+dest=${1:-"$HOME/ORF_Scout"}
+for tool in wget unzip sha256sum install; do
+  command -v "$tool" >/dev/null || { echo "Falta $tool en este equipo." >&2; exit 1; }
+done
+tmp=$(mktemp -d)
+trap 'rm -rf -- "$tmp"' EXIT
+url=https://raw.githubusercontent.com/AmaruAM/ORF-FINDER-/ac0b72da2702a74b081da25366c939ad87858f10/ORF_Scout.zip
+wget -nv -O "$tmp/ORF_Scout.zip" "$url"
+(cd "$tmp" && printf '%s  ORF_Scout.zip\n' 'f72f06c93bc92cb4c8bef0030b55eb6495be41986461179be60ba0d234448133' | sha256sum -c - && unzip -q ORF_Scout.zip)
+mkdir -p -- "$dest"/{scripts/catalogo,guias,genomas,resultados}
+for script in orf_scout.sh starvation_scout.sh; do
+  install -m 755 -- "$tmp/ORF_Scout/$script" "$dest/scripts/$script"
+done
+install -m 644 -- "$tmp/ORF_Scout/catalogo/marcadores.tsv" "$dest/scripts/catalogo/marcadores.tsv"
+install -m 644 -- "$tmp/ORF_Scout/"*.md "$dest/guias/"
+printf '\nInstalación lista en %s\nGuarda tus archivos .fna en genomas/.\n' "$dest"
+printf 'cd %q\nbash scripts/orf_scout.sh --muestras resultados/orf 1 1 genomas/*.fna\nbash scripts/starvation_scout.sh --orf resultados/orf resultados/anotaciones 1\n' "$dest"
