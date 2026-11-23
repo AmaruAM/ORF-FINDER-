@@ -1,0 +1,29 @@
+# Starvation-Scout
+Extrae el ZIP completo. Conserva ambos scripts juntos y el subdirectorio catalogo. Ejecuta `bash starvation_scout.sh` en Bash 4+ con awk y utilidades GNU. Ingresa cada FASTA en una línea y pulsa Enter al terminar. Se requieren dos o más archivos diferentes. `muestras.tsv` vincula los nombres de las muestras con sus rutas originales.
+
+Para reproducir la comparación completa:
+
+```bash
+bash starvation_scout.sh resultados 1 ejemplos/MG1655.fna ejemplos/W3110.fna
+```
+
+Opciones: 1 todos los análisis; 2 marcadores; 3 cobertura por sistema; 4 variación del ADN. Todas calculan las coincidencias de base. El script recibe directamente los ensamblajes y reutiliza internamente el detector local de ORF en modo habitual. Funciona sin internet ni anotadores externos.
+
+**Criterio de anotación.** El perfil 90/80/80 exige ≥90% de identidad de aminoácidos, ≥80% de cobertura de la proteína candidata desde su inicio seleccionado y ≥80% de cobertura de la referencia. Los tres criterios son inclusivos y se evalúan sin redondear. Solo se cuenta el marcador si hay un único gen del catálogo que supera los tres cortes para ese ORF. Se etiqueta como idéntica, probable o probable con cobertura parcial. El último estado advierte que los extremos o la longitud difieren; una asignación identifica un marcador y no demuestra una proteína intacta o actividad. Los parámetros siguen el precedente de referencias proteicas confiables de Bakta. El método de búsqueda es propio y su rendimiento puede diferir.
+
+**Cómo busca.** El programa traduce los ORF, localiza palabras exactas de cinco aminoácidos a pasos de tres en la consulta y compara los solapamientos sin huecos en los desplazamientos propuestos. Para cada desplazamiento usa el inicio válido más próximo al inicio proyectado de la referencia. Requiere ≥30 residuos comparados. Dentro de cada nivel elige el desplazamiento con mayor número de identidades menos discrepancias. Una inserción o deleción interna puede reducir la detección. La base incluye 15 referencias de MG1655; un parálogo ajeno al catálogo puede pasar inadvertido. Esta regla de cribado se diseñó para secuencias cercanas a la referencia. Quedan fuera de alcance la asignación funcional definitiva y los homólogos lejanos.
+
+**Qué queda en revisión.** Se guarda en `01_marcadores/revision.tsv` un candidato con ≥70% de identidad y ≥30% de ambas coberturas que no alcanza el perfil de asignación; también se guardan los genes competidores si varios pasan el perfil fuerte para el mismo ORF. Los umbrales de revisión y el mínimo de 30 residuos son decisiones exploratorias. Estas filas quedan fuera de los conteos por sistema. Un cero indica que no hubo una asignación aceptada.
+
+**Resultados.** En `01_marcadores/` están la matriz de copias por muestra, los hallazgos con coordenadas corregidas, proteína RefSeq, hebra e inicio utilizado, y los FASTA de ADN por sistema. En `02_sistemas/` se cuentan genes distintos sobre el total del catálogo en cada sistema. Un gen puede participar en dos procesos (crr). En `03_variacion/` se comparan por pares las secuencias de ADN completas, incluido STOP. Se informa idéntico, diferente, múltiples alelos o no evaluable. Las copias idénticas de un marcador cuentan como un alelo. El resumen muestra el número de marcadores distintos y el tiempo.
+
+**Procedencia.** Los dos FASTA proceden de ENA: https://www.ebi.ac.uk/ena/browser/view/U00096.3 y https://www.ebi.ac.uk/ena/browser/view/AP009048.1 . Las secuencias de referencia se tradujeron de las CDS de MG1655 identificadas por proteína en el GFF de RefSeq GCF_000005845.2, usando tabla 11 y metionina inicial. Cada fila de `catalogo/marcadores.tsv` incluye la accesión proteica con versión y la fuente funcional. La presencia de un marcador refleja potencial genómico; la expresión bajo privación de glucosa se estudia con datos de expresión.
+
+**Lecturas para la sustentación.** Peterson CN, Mandel MJ, Silhavy TJ. Escherichia coli starvation diets: essential nutrients weigh in distinctly. J Bacteriol. 2005;187:7549–53. PMID:16267278. Para CsrA y CstA véase PMID:12867454. Las fuentes de PTS, MglBAC y respuesta estricta están asociadas a sus respectivas filas del catálogo.
+
+**Porcentajes.** En hallazgos.tsv la identidad es el porcentaje de aminoácidos idénticos sobre los residuos comparados, y cada cobertura emplea como denominador la longitud de la proteína correspondiente (sin STOP). La identidad de ADN usa los codones emparejados y añade STOP si se alcanzan ambos extremos C-terminales. Para el primer codón seleccionado se interpreta metionina iniciadora. La variación entre muestras sigue comparando la CDS recuperada completa. En sistemas.tsv el denominador es el número de genes distintos del sistema; en resumen.tsv, el total del catálogo.
+
+**Referencias metodológicas.** Bakta 1.12.1, sección User-provided protein sequences: https://pypi.org/project/bakta/1.12.1/ . NCBI, PGAP Protein Annotation Evidence, reglas BlastRule específicas de familia: https://www.ncbi.nlm.nih.gov/genome/annotation_prok/evidence/ . Hayashi et al. Highly accurate genome sequences of Escherichia coli K-12 strains MG1655 and W3110. Mol Syst Biol. 2006;2:2006.0007. https://pmc.ncbi.nlm.nih.gov/articles/PMC1681481/ .
+
+## Anotar muestras extraídas
+Para todas las muestras usa `bash starvation_scout.sh --orf resultados_orf anotaciones 1`. Para una sola pasa por ejemplo `resultados_orf/MG1655` en lugar de la carpeta padre. Para varias concretas añade sus rutas después de la opción. Cada muestra puede trasladarse de manera independiente con origen.txt y 01_orf/. En el directorio de la corrida, por_muestra/NOMBRE/ contiene sus hallazgos, revisión, secuencias y resultados por sistema según la opción. Las matrices y comparaciones por pares se conservan en las carpetas comunes. Se admiten también manifiestos muestras.tsv de versiones anteriores.
