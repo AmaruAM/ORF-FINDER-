@@ -1,5 +1,5 @@
 # ORF-Scout
-Desde esta carpeta en Linux o Google Cloud Shell, ejecuta `bash orf_scout.sh`. Escribe la ruta del ensamblaje, la carpeta de salida y la opción. Acepta FASTA de ADN sin comprimir, con encabezados únicos, múltiples contigs y secuencias en varias líneas. Se requieren Bash 4+, awk y utilidades GNU habituales. Las rutas relativas parten de la carpeta donde abres la terminal.
+Ejecuta `bash orf_scout.sh`. Escribe un nombre de corrida y agrega rutas de archivos .fna o carpetas que los contengan. Pulsa Enter para iniciar el análisis. Cada corrida recibe su propio directorio en corridas/, con copias de los genomas, una tabla de procedencia y resultados por muestra. Incluso si repites el nombre, ambas corridas se conservan. Al terminar puedes iniciar la anotación del grupo con Enter. Acepta FASTA de ADN sin comprimir, con encabezados únicos, múltiples contigs y secuencias en varias líneas. Se requieren Bash 4+, awk y utilidades GNU habituales. Las rutas relativas parten de la carpeta donde abres la terminal.
 
 Para reproducir la prueba sin preguntas:
 
@@ -23,7 +23,7 @@ Cada corrida crea su propia carpeta y un resumen. En MG1655, modo habitual: 24 0
 5. Guía de clase, sesiones 6, 10, 13 y 14. https://github.com/1ABL0014/Principios_Programacion_Bioinformatica
 
 ## Una carpeta por genoma
-Selecciona «Varios ensamblajes» o ejecuta:
+En modo de argumentos, ejecuta:
 ```bash
 bash orf_scout.sh --muestras resultados_orf 1 1 ejemplos/*.fna
 bash starvation_scout.sh --orf resultados_orf anotaciones 1
