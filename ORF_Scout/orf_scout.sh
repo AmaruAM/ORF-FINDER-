@@ -18,24 +18,59 @@ HELP
 fi
 self=$(realpath -- "$0")
 if (($# == 0)); then
-  printf '%s\n' 'ORF-Scout' '1. Un ensamblaje' '2. Varios ensamblajes'
-  read -r -p 'Modo [1]: ' input_mode
-  case ${input_mode:-1} in
-    1) ;;
-    2)
-      inputs=()
-      while true; do
-        read -r -p 'Ruta .fna (Enter para terminar): ' path
-        [[ -n $path ]] || break
-        inputs+=("$path")
-      done
-      read -r -p 'Carpeta de resultados [resultados_orf]: ' dest
-      read -r -p '1 todo, 2 ORF, 3 operones, 4 GC [1]: ' opt
-      read -r -p '1 inicios habituales, 2 ampliados [1]: ' ini
-      set -- --muestras "${dest:-resultados_orf}" "${opt:-1}" "${ini:-1}" "${inputs[@]}"
-      ;;
-    *) echo 'Modo inválido.' >&2; exit 2;;
+  base=$(dirname -- "$self")
+  root=$base
+  [[ ${base##*/} != scripts ]] || root=$(dirname -- "$base")
+  read -r -p 'Nombre de esta corrida [corrida]: ' group
+  group=${group:-corrida}
+  [[ $group != */* && $group != .* && $group != *$'\t'* ]] || { echo 'Elige un nombre de grupo sin barras ni tabulaciones.' >&2; exit 2; }
+  inputs=()
+  declare -A taken=()
+  shopt -s nullglob
+  while true; do
+    read -r -p 'Ruta de un .fna o de una carpeta con .fna (Enter para terminar): ' path
+    if [[ -z $path ]]; then
+      (( ${#inputs[@]} )) && break
+      echo 'Agrega al menos un ensamblaje.'; continue
+    fi
+    if [[ $path == "~/"* ]]; then path="$HOME/${path:2}"; fi
+    files=("$path")
+    if [[ -d $path ]]; then files=("$path"/*.fna); fi
+    if (( ! ${#files[@]} )); then echo 'La carpeta no contiene archivos .fna.'; continue; fi
+    for file in "${files[@]}"; do
+      if [[ ! -f $file || ! -r $file || $file != *.fna ]]; then echo "Revisa la ruta del .fna: $file"; continue; fi
+      name=$(basename -- "$file")
+      if [[ $name == .* || $name == *'|'* || $file == *$'\t'* || $file == *$'\n'* ]]; then echo "Nombre de muestra inválido: $name"; continue; fi
+      source=$(realpath -- "$file")
+      if [[ ${taken[$name]+x} ]]; then
+        [[ ${taken[$name]} == "$source" ]] || { echo "Dos muestras se llaman $name. Asigna nombres distintos antes de ejecutar." >&2; exit 2; }
+        continue
+      fi
+      taken[$name]=$source; inputs+=("$file"); printf 'Añadido: %s\n' "$name"
+    done
+  done
+  read -r -p '1 todo, 2 ORF, 3 operones, 4 GC [1]: ' opt
+  read -r -p '1 inicios habituales, 2 ampliados [1]: ' ini
+  opt=${opt:-1}; ini=${ini:-1}
+  [[ $opt =~ ^[1-4]$ && $ini =~ ^[12]$ ]] || { echo 'Opción inválida.' >&2; exit 2; }
+  mkdir -p -- "$root/corridas"
+  run=$(mktemp -d -- "$root/corridas/$(date +%Y%m%d_%H%M%S)_${group}.XXXXXX")
+  printf 'Carpeta de esta corrida: %s\n' "$run"
+  mkdir -- "$run/genomas"
+  printf 'muestra\torigen\n' > "$run/muestras.tsv"
+  for file in "${inputs[@]}"; do
+    name=$(basename -- "$file")
+    cp -- "$file" "$run/genomas/$name"
+    printf '%s\t%s\n' "${name%.fna}" "${taken[$name]}" >> "$run/muestras.tsv"
+  done
+  bash "$self" --muestras "$run/orf" "$opt" "$ini" "$run"/genomas/*.fna
+  read -r -p '¿Anotar ahora los ORF de este grupo? [S/n]: ' answer || answer=n
+  case ${answer:-s} in
+    s|S|si|sí|SI|Sí) bash "$base/starvation_scout.sh" --orf "$run/orf" "$run/anotaciones" 1 ;;
+    *) printf 'Para anotar después: bash %q --orf %q %q 1\n' "$base/starvation_scout.sh" "$run/orf" "$run/anotaciones" ;;
   esac
+  printf 'Corrida guardada en %s\n' "$run"
+  exit
 fi
 if [[ ${1:-} == --muestras || ${1:-} == --lote ]]; then
   shift
