@@ -19,19 +19,21 @@ La opción `1` genera la tabla de coincidencias y el resumen. La opción `2` req
 ```text
 Starvation/
 ├── muestras.tsv
-├── coincidencias.tsv
+├── por_cepa/
+│   ├── MG1655/coincidencias.tsv
+│   └── W3110/coincidencias.tsv
 ├── resumen.tsv
 └── variantes.tsv       solo con la opción 2
 ```
 
-- `coincidencias.tsv` es la tabla principal, ordenada por sistema. Cada fila describe una proteína de referencia encontrada o candidata en una muestra. Si una proteína pertenece a más de un sistema, aparece una fila por sistema. El identificador `orf` permite recuperar su secuencia en `ORF/MUESTRA/01_orf/orf.fna` o `orf.faa`.
-- `resumen.tsv` cuenta por muestra las proteínas asignadas y los candidatos que requieren revisión.
+- `por_cepa/CEPA/coincidencias.tsv` contiene una sola cepa por tabla y ordena sus coincidencias por sistema. Cada fila describe una proteína de referencia encontrada o candidata. Si una proteína pertenece a más de un sistema, aparece una fila por sistema. El identificador `orf` permite recuperar su secuencia en `ORF/CEPA/01_orf/orf.fna` o `orf.faa`.
+- `resumen.tsv` reúne en una tabla breve el número de proteínas asignadas y de candidatos que requieren revisión para cada cepa.
 - `muestras.tsv` conserva el nombre y la procedencia de cada ensamblaje.
-- `variantes.tsv` compara la secuencia de ADN de las proteínas asignadas entre pares de muestras. Se crea solo con la opción 2.
+- `variantes.tsv` compara la secuencia de ADN de las proteínas asignadas entre pares de cepas. Se crea solo con la opción 2.
 
 ### Columnas de `coincidencias.tsv`
 
-`muestra`, `sistema`, `proteina` y `accesion_referencia` identifican la cepa, el módulo funcional y la proteína comparada. `orf`, `contig`, `inicio`, `fin` y `hebra` ubican el ORF. `inicio_usado` indica si se usó el inicio principal, uno alternativo o si la asignación quedó pendiente. `identidad_aa_pct` informa identidad de aminoácidos. `cobertura_referencia_pct` y `cobertura_orf_pct` indican qué proporción de cada proteína se comparó. `identidad_adn_pct` compara los codones alineados. `aa_comparados` muestra el tamaño de la región evaluada. `estado` puede ser `identica`, `probable`, `probable_cobertura_parcial`, `revisar` o `ambiguo`.
+`muestra`, `sistema`, `proteina` y `accesion_referencia` identifican la cepa, el módulo funcional y la proteína comparada. Como cada archivo está dentro de la carpeta de su cepa, todas sus filas pertenecen a esa cepa. `orf`, `contig`, `inicio`, `fin` y `hebra` ubican el ORF. `inicio_usado` indica si se usó el inicio principal, uno alternativo o si la asignación quedó pendiente. `identidad_aa_pct` informa identidad de aminoácidos. `cobertura_referencia_pct` y `cobertura_orf_pct` indican qué proporción de cada proteína se comparó. `identidad_adn_pct` compara los codones alineados. `aa_comparados` muestra el tamaño de la región evaluada. `estado` puede ser `identica`, `probable`, `probable_cobertura_parcial`, `revisar` o `ambiguo`.
 
 El perfil de asignación fuerte exige ≥90 % de identidad de aminoácidos y ≥80 % de cobertura de la referencia y del ORF. Coincidencias desde 70 % de identidad y 30 % de ambas coberturas se muestran como `revisar`. Son umbrales exploratorios para secuencias cercanas a la referencia. Las inserciones o deleciones pueden dificultar la detección. Un cero en el resumen significa que no hubo una asignación fuerte. Conviene revisar también las filas `revisar` y `ambiguo`.
 
