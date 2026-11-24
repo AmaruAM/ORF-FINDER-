@@ -1,0 +1,13 @@
+Warning: truncated output (original token count: 311)
+Total output lines: 10
+
+sistema	alcance	fuente
+carbon_scavenging	Captación y regulación de fuentes de carbono	Peterson et al. 2005 PMID:16267278; Shimizu 2014 PMID:24958385
+carbon_reserves	Síntesis y movilización de reservas de carbono	Peterson et al. 2005 PMID:16267278; Shimizu 2014 PMID:24958385
+stringent_response	Respuesta a aminoácidos no cargados y limitación nutricional vía (p)ppGpp	Irving et al. 2021 doi:10.1038/s41579-020-00470-y
+general_stationary_survival	Protección y adaptación general al crecimiento detenido	RpoS review 2024 doi:10.1128/mmbr.00151-22; Peterson et al. 2005 PMID:16267278
+nitrogen_s…11 tokens truncated…similación de nitrógeno	Peterson et al. 2005 PMID:16267278; Shimizu 2014 PMID:24958385
+phosphate_scavenging	Regulón Pho, captación y utilización de fosfato	Moreau 2023 doi:10.1099/mic.0.001312; Peterson et al. 2005 PMID:16267278
+sulfur_scavenging	Regulación y adquisición/asimilación de azufre	Shimizu 2014 PMID:24958385; Shimizu 2015 PMID:25712586
+iron_scavenging	Regulación de hierro y adquisición de hierro férrico	Shimizu 2015 PMID:25712586
+amino_acid_limitation	Respuesta a aminoácidos no cargados y regulación por Lrp	Peterson et al. 2005 PMID:16267278; Shimizu 2015 PMID:25712586
