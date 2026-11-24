@@ -1,31 +1,52 @@
 # ORF-Scout
-Ejecuta `bash orf_scout.sh`. Escribe un nombre de corrida y agrega rutas de archivos .fna o carpetas que los contengan. Pulsa Enter para iniciar el análisis. Cada corrida recibe su propio directorio en corridas/, con copias de los genomas, una tabla de procedencia y resultados por muestra. Incluso si repites el nombre, ambas corridas se conservan. Al terminar puedes iniciar la anotación del grupo con Enter. Acepta FASTA de ADN sin comprimir, con encabezados únicos, múltiples contigs y secuencias en varias líneas. Se requieren Bash 4+, awk y utilidades GNU habituales. Las rutas relativas parten de la carpeta donde abres la terminal.
 
-Para reproducir la prueba sin preguntas:
+ORF-Scout procesa ensamblajes bacterianos en FASTA de ADN. Para esta prueba, usa la tabla de traducción bacteriana 11 y ORF completos de al menos 150 pb. La identificación de ORF es una predicción por codones de inicio y terminación, no una anotación funcional definitiva.
+
+## Inicio interactivo y corridas por grupo
+
+Ejecuta `./orf_scout.sh` desde `ORF_Scout/` o `bash orf_scout.sh`. El menú solicita un nombre de grupo, acepta archivos `.fna` individuales o carpetas que los contienen, y crea una corrida nueva en `corridas/`. Copia las entradas para conservar la procedencia. Un nombre de grupo puede repetirse porque cada ejecución recibe una carpeta única.
+
+Al concluir ORF-Scout, presiona Enter para terminar la primera etapa. La anotación se inicia solo si respondes `s`. Para ejecutarla más tarde, copia el comando que muestra ORF-Scout. Cada mensaje `[n/N]` indica la etapa que está avanzando.
+
+```text
+corridas/FECHA_GRUPO_ID/
+├── genomas/                 copias de los ensamblajes de entrada
+├── muestras.tsv             nombre de muestra y ruta original
+├── ORF/
+│   ├── MG1655/
+│   │   ├── 01_orf/
+│   │   │   ├── orf.fna      secuencias de ADN de ORF candidatos
+│   │   │   ├── orf.faa      traducción de los ORF a proteínas
+│   │   │   └── orf.tsv      coordenadas, hebra, longitud e inicio
+│   │   ├── 02_operones/      grupos de ORF vecinos, si se calcularon
+│   │   ├── 03_gc/            composición GC, si se calculó
+│   │   └── resumen.tsv       parámetros y conteos de la muestra
+│   └── otra_cepa/            misma estructura para cada genoma
+└── Starvation/               aparece al ejecutar el segundo análisis
+```
+
+## Archivos de ORF
+
+- `orf.fna` contiene ADN orientado de cada ORF candidato, incluido el codón STOP.
+- `orf.faa` contiene la traducción proteica, sin el STOP terminal. Un inicio bacteriano alternativo se traduce como metionina inicial.
+- `orf.tsv` contiene una fila por ORF. `contig`, `inicio`, `fin` y `hebra` ubican la secuencia en el ensamblaje. `longitud_pb`, `inicios_alt_5p` y `gc_pct` describen el candidato.
+- `02_operones/grupos.tsv` recoge grupos de ORF consecutivos, en la misma hebra y separados entre −4 y 75 pb. Son candidatos basados en vecindad, no operones confirmados por promotor o expresión.
+- `03_gc/gc.tsv` registra el GC de cada ORF, la diferencia frente al ensamblaje en puntos porcentuales y el estado estadístico. Un GC atípico no demuestra transferencia horizontal.
+- `resumen.tsv` presenta contigs, GC del ensamblaje, conteo de ORF, grupos de vecindad, datos GC, parámetros y tiempo.
+
+## Parámetros del detector
+
+En el modo habitual se usan ATG, GTG y TTG. El modo ampliado añade CTG, ATT, ATC y ATA. Se buscan STOP TAA, TAG y TGA en los seis marcos. Los contigs se tratan como lineales y las bases ambiguas interrumpen la búsqueda. El detector guarda el inicio válido más lejano al STOP de cada marco y registra otros inicios elegibles. Los ORF solapados pueden aparecer como candidatos independientes.
+
+Para reproducir el análisis de una muestra sin preguntas:
 
 ```bash
 bash orf_scout.sh ejemplos/MG1655.fna resultados 1 1
 ```
 
-El primer número selecciona todo (1), ORF (2), vecindad (3) o GC (4). El segundo selecciona ATG/GTG/TTG (1) o añade CTG/ATT/ATC/ATA (2). La tabla 11 presupone TAA/TAG/TGA como STOP. Comprueba el código genético de tu organismo. Los extremos se tratan como lineales y las bases ambiguas cortan la búsqueda de ORF.
+El tercer argumento ejecuta todo (1), solo ORF (2), posibles operones (3) o GC (4). El cuarto selecciona inicios habituales (1) o ampliados (2). Se requiere Bash 4+, awk y utilidades GNU habituales.
 
-1. **ORF**. Por contig y hebra se recorren tres marcos en pasos de tres. Cada registro usa el inicio elegible más lejano al STOP en ese marco y guarda las coordenadas 5′ de los inicios alternativos elegibles. Mínimo 150 pb incluyendo STOP. En `01_orf/`, el FASTA contiene ADN orientado y el TSV da posiciones genómicas inclusivas desde 1.
-2. **Posibles operones**. Solo para este análisis se ordenan los candidatos por longitud descendente dentro del contig. Se seleccionan sucesivamente los compatibles con los ya aceptados (solapamiento máximo de 4 pb); en caso de empate se prioriza la menor coordenada. En orden genómico se agrupan vecinos consecutivos de la misma hebra con distancia de −4 a 75 pb. Ver `02_operones/grupos.tsv`. En la hebra negativa se lee la lista de derecha a izquierda para obtener el orden de transcripción. La prioridad por longitud puede desplazar genes cortos reales; los grupos son hipótesis de vecindad.
-3. **GC**. En `03_gc/gc.tsv` se reportan el GC de cada candidato y su diferencia respecto al ensamblaje en puntos porcentuales. El cálculo global usa A+C+G+T. Para ORF de ≥300 pb se usan límites Q1−1,5×RIC y Q3+1,5×RIC entre todos los elegibles, con cuantiles interpolados y al menos 20 observaciones. Se informa por separado si faltan datos. La etiqueta indica composición atípica.
+## Referencias
 
-Cada corrida crea su propia carpeta y un resumen. En MG1655, modo habitual: 24 056 candidatos, 1 021 grupos, 373 candidatos con GC atípico. El grupo 494 corresponde a los ORF de mglC, mglA y mglB en orden de coordenadas. El script 1 asigna identificadores de ORF; los nombres de genes proceden del contraste posterior.
-
-## Fuentes
-1. National Center for Biotechnology Information. ORFfinder. https://www.ncbi.nlm.nih.gov/orffinder/
-2. National Center for Biotechnology Information. The genetic codes. https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi
-3. Moreno-Hagelsieb G, Collado-Vides J. A powerful non-homology method for the prediction of operons in prokaryotes. Bioinformatics. 2002;18 Suppl 1:S329–36.
-4. García-Vallvé S, Romeu A, Palau J. Horizontal gene transfer in bacterial and archaeal complete genomes. Genome Res. 2000;10:1719–25. Los umbrales de vecindad, RIC y mínimo de observaciones son decisiones del proyecto.
-5. Guía de clase, sesiones 6, 10, 13 y 14. https://github.com/1ABL0014/Principios_Programacion_Bioinformatica
-
-## Una carpeta por genoma
-En modo de argumentos, ejecuta:
-```bash
-bash orf_scout.sh --muestras resultados_orf 1 1 ejemplos/*.fna
-bash starvation_scout.sh --orf resultados_orf anotaciones 1
-```
-Cada archivo genera resultados_orf/NOMBRE/ con sus análisis, resumen y origen.txt. Puedes añadir nuevos genomas a la misma carpeta usando nombres distintos. Una muestra existente se protege contra sobrescritura. La extracción acepta cualquier número de entradas sujeto a recursos del sistema. Usa automáticamente los procesadores disponibles con nproc; ORF_JOBS permite ajustar el paralelismo según CPU y memoria.
+1. NCBI ORFfinder. https://www.ncbi.nlm.nih.gov/orffinder/
+2. NCBI Genetic Codes. https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi

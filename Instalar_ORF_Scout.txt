@@ -8,14 +8,15 @@ for tool in wget unzip sha256sum install; do
 done
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
-url=https://raw.githubusercontent.com/AmaruAM/ORF-FINDER-/27408627637e9c445bba9d34811f7e688917287f/ORF_Scout.zip
+url=https://raw.githubusercontent.com/AmaruAM/ORF-FINDER-/main/ORF_Scout.zip
 wget -nv -O "$tmp/ORF_Scout.zip" "$url"
-(cd "$tmp" && printf '%s  ORF_Scout.zip\n' '7407c3dab1693178702834c99aacf976acc9312b9ecfdf382fbf7a3cf3e8977e' | sha256sum -c - && unzip -q ORF_Scout.zip)
+(cd "$tmp" && printf '%s  ORF_Scout.zip\n' '9780337c76c1383981912277c46eef338efde54c75ad80d4a019a65218a9847f' | sha256sum -c - && unzip -q ORF_Scout.zip)
 mkdir -p -- "$dest"/{scripts/catalogo,guias,corridas}
 for script in orf_scout.sh starvation_scout.sh; do
   install -m 755 -- "$tmp/ORF_Scout/$script" "$dest/scripts/$script"
 done
 install -m 644 -- "$tmp/ORF_Scout/catalogo/marcadores.tsv" "$dest/scripts/catalogo/marcadores.tsv"
+install -m 644 -- "$tmp/ORF_Scout/catalogo/referencias.tsv" "$dest/scripts/catalogo/referencias.tsv"
 install -m 644 -- "$tmp/ORF_Scout/"*.md "$dest/guias/"
 printf '\nInstalación lista en %s\n' "$dest"
-printf 'Para iniciar una corrida: bash %q\n' "$dest/scripts/orf_scout.sh"
+printf 'Para iniciar una corrida: %q\n' "$dest/scripts/orf_scout.sh"

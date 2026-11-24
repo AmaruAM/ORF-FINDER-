@@ -12,8 +12,10 @@ if [[ ${1:-} == --help ]]; then
 fi
 batch=""
 roots=(); labels=()
+explicit_orf=0
 if [[ ${1:-} == --orf ]]; then
   (($# >= 4)) || { echo 'Uso: --orf carpeta_muestras carpeta_salida opción [otra_carpeta ...]' >&2; exit 2; }
+  explicit_orf=1
   batch=$(realpath -- "$2"); parent=$3; choice=$4; shift 4; roots=("$batch" "$@")
 elif (($#)); then
   (($# >= 4)) || { echo 'Se requieren salida, opción y al menos dos .fna.' >&2; exit 2; }
@@ -75,8 +77,15 @@ for i in "${!samples[@]}"; do
   samples[i]=$path; seen[$path]=1
 done
 fi
-mkdir -p -- "$parent"
-run=$(mktemp -d -- "$(realpath -- "$parent")/starvation_scout.XXXXXXXX")
+if (( explicit_orf )); then
+  [[ ! -e $parent ]] || { echo "La carpeta de resultados ya existe: $parent" >&2; exit 2; }
+  mkdir -p -- "$(dirname -- "$parent")"
+  mkdir -- "$parent"
+  run=$(realpath -- "$parent")
+else
+  mkdir -p -- "$parent"
+  run=$(mktemp -d -- "$(realpath -- "$parent")/starvation_scout.XXXXXXXX")
+fi
 complete=0
 trap 'if (( ! complete )); then rm -rf -- "$run"; fi' EXIT
 trap 'exit 130' INT
@@ -87,12 +96,13 @@ printf 'id\tarchivo\n' > muestras.tsv
 printf 'muestra\tgen\taccesion\tcontig\tinicio\tfin\thebra\torf\tinicio_elegido\tsistemas\tidentidad_aa_pct\tcobertura_ref_aa_pct\tidentidad_adn_ref_pct\tcobertura_orf_aa_pct\taa_comparados\tasignacion\n' > 01_marcadores/hallazgos.tsv
 printf 'muestra\torf\tcontig\treferencia\testado\tidentidad_aa_pct\tcobertura_orf_pct\tcobertura_ref_pct\taa_comparados\n' > 01_marcadores/revision.tsv
 touch tmp/alelos.tsv
+printf '[1/3] Entradas validadas. Muestras: %d. Marcadores en catálogo: %d.\n' "${#samples[@]}" "$(awk 'END{print NR-1}' "$catalog")"
 for i in "${!samples[@]}"; do
   sample=$(printf 'M%03d' "$((i+1))")
   sample=${labels[i]:-$sample}
   printf '%s\t%s\n' "$sample" "${samples[i]}" >> muestras.tsv
   mkdir "tmp/$sample"
-  printf 'Procesando %s (%s)\n' "$sample" "$(basename -- "${samples[i]}")"
+  printf '[2/3] Buscando marcadores en %s (%s)\n' "$sample" "$(basename -- "${samples[i]}")"
   if [[ -n $batch ]]; then
     files=("${dirs[i]}")
   else
@@ -242,6 +252,7 @@ END{
    }
  }
 }' tmp/alelos.tsv | tee resumen.tsv
+printf '[3/3] Matrices, tablas por sistema y secuencias FASTA generadas.\n'
 if [[ -f sistemas.tsv ]]; then mkdir 02_sistemas; mv sistemas.tsv 02_sistemas/; fi
 if [[ -f variacion.tsv ]]; then mkdir 03_variacion; mv variacion.tsv 03_variacion/; fi
 mkdir por_muestra
