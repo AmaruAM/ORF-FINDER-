@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Comparación de marcadores de escasez de carbono por identidad proteica y cobertura.
+# Coincidencias de proteínas de respuesta a limitación nutricional en E. coli.
 set -euo pipefail
 export LC_ALL=C
 base=$(dirname -- "$(realpath -- "$0")")
 catalog="$base/catalogo/marcadores.tsv"
 if [[ ${1:-} == --help ]]; then
-  echo 'Uso: bash starvation_scout.sh [carpeta_salida opción muestra1.fna muestra2.fna ...]'
-  echo 'Desde ORF: bash starvation_scout.sh --orf carpeta_muestras carpeta_salida opción [otra_carpeta ...]'
-  echo '1 todo, 2 marcadores, 3 sistemas, 4 variación del ADN, 0 salir.'
+  echo 'Uso: bash starvation_scout.sh [carpeta_salida opción muestra.fna ...]'
+  echo 'Desde ORF: bash starvation_scout.sh --orf carpeta_muestras carpeta_salida opción'
+  echo '1 coincidencias por sistema, 2 coincidencias y comparación de variantes, 0 salir.'
   exit
 fi
 batch=""
@@ -18,7 +18,7 @@ if [[ ${1:-} == --orf ]]; then
   explicit_orf=1
   batch=$(realpath -- "$2"); parent=$3; choice=$4; shift 4; roots=("$batch" "$@")
 elif (($#)); then
-  (($# >= 4)) || { echo 'Se requieren salida, opción y al menos dos .fna.' >&2; exit 2; }
+  (($# >= 3)) || { echo 'Se requieren salida, opción y al menos un .fna.' >&2; exit 2; }
   parent=$1; choice=$2; shift 2; samples=("$@")
 else
   samples=()
@@ -33,11 +33,11 @@ else
   done
   fi
   read -r -p 'Carpeta de salida [resultados]: ' parent
-  printf '%s\n' 'Starvation-Scout' '1. Ejecutar todo' '2. Detectar marcadores' '3. Comparar sistemas' '4. Comparar variantes de ADN' '0. Salir'
+  printf '%s\n' 'Starvation-Scout' '1. Buscar coincidencias por sistema' '2. Buscar coincidencias y comparar variantes' '0. Salir'
   read -r -p 'Opción [1]: ' choice
 fi
 parent=${parent:-resultados}; choice=${choice:-1}
-case "$choice" in 0) exit;; 1|2|3|4) ;; *) echo 'Opción inválida.' >&2; exit 2;; esac
+case "$choice" in 0) exit;; 1|2) ;; *) echo 'Opción inválida.' >&2; exit 2;; esac
 if [[ -n $batch ]]; then
   samples=(); dirs=(); declare -A used=()
   add_sample(){
@@ -66,7 +66,11 @@ if [[ -n $batch ]]; then
   done
   (( ${#samples[@]} )) || { echo 'Sin muestras.' >&2; exit 2; }
 else
-(( ${#samples[@]} >= 2 )) || { echo 'Ingresa al menos dos ensamblajes.' >&2; exit 2; }
+(( ${#samples[@]} >= 1 )) || { echo 'Ingresa al menos un ensamblaje.' >&2; exit 2; }
+if [[ $choice == 2 && ${#samples[@]} -lt 2 ]]; then
+  echo 'Para comparar variantes se requieren al menos dos muestras.' >&2
+  exit 2
+fi
 declare -A seen=() named=()
 for i in "${!samples[@]}"; do
   path=$(realpath -- "${samples[i]}")
@@ -91,18 +95,17 @@ trap 'if (( ! complete )); then rm -rf -- "$run"; fi' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 cd -- "$run"; SECONDS=0
-mkdir -p 01_marcadores/secuencias tmp
+mkdir -p tmp
 printf 'id\tarchivo\n' > muestras.tsv
-printf 'muestra\tgen\taccesion\tcontig\tinicio\tfin\thebra\torf\tinicio_elegido\tsistemas\tidentidad_aa_pct\tcobertura_ref_aa_pct\tidentidad_adn_ref_pct\tcobertura_orf_aa_pct\taa_comparados\tasignacion\n' > 01_marcadores/hallazgos.tsv
-printf 'muestra\torf\tcontig\treferencia\testado\tidentidad_aa_pct\tcobertura_orf_pct\tcobertura_ref_pct\taa_comparados\n' > 01_marcadores/revision.tsv
+printf 'muestra\tsistema\tproteina\taccesion_referencia\torf\tcontig\tinicio\tfin\thebra\tinicio_usado\tidentidad_aa_pct\tcobertura_referencia_pct\tcobertura_orf_pct\tidentidad_adn_pct\taa_comparados\testado\n' > coincidencias.tsv
 touch tmp/alelos.tsv
-printf '[1/3] Entradas validadas. Muestras: %d. Marcadores en catálogo: %d.\n' "${#samples[@]}" "$(awk 'END{print NR-1}' "$catalog")"
+printf '[1/3] Entradas validadas. Muestras: %d. Proteínas de referencia: %d.\n' "${#samples[@]}" "$(awk 'END{print NR-1}' "$catalog")"
 for i in "${!samples[@]}"; do
   sample=$(printf 'M%03d' "$((i+1))")
   sample=${labels[i]:-$sample}
   printf '%s\t%s\n' "$sample" "${samples[i]}" >> muestras.tsv
   mkdir "tmp/$sample"
-  printf '[2/3] Buscando marcadores en %s (%s)\n' "$sample" "$(basename -- "${samples[i]}")"
+  printf '[2/3] Comparando proteínas con el catálogo para %s (%s)\n' "$sample" "$(basename -- "${samples[i]}")"
   if [[ -n $batch ]]; then
     files=("${dirs[i]}")
   else
@@ -155,7 +158,7 @@ for i in "${!samples[@]}"; do
       startAA[g]=first;span[g]=len;queryBegin[g]=q0;refBegin[g]=r0
     }
   }
-  function process(    j,k,p,word,key,g,nq,delta,i,winner,strong,nt,a,b,kind,sets,total,path,dnaMatches,qnt,rnt,basesCompared,status){
+  function process(    j,k,p,word,key,g,nq,delta,i,winner,strong,nt,a,b,kind,sets,total,dnaMatches,qnt,rnt,basesCompared,status){
     peptide=""; nStarts=0; delete visited;delete level;delete points
     for(p=1;p<length(dna)-2;p+=3){
       codon=substr(dna,p,3); peptide=peptide code[codon]
@@ -182,7 +185,8 @@ for i in "${!samples[@]}"; do
       if(level[g]<1) continue
       if(level[g]==1 || strong>1){
         status=(level[g]==2?"ambiguo":"revisar")
-        print sample,id,location[id],g,status,sprintf("%.2f",ident[g]),sprintf("%.2f",covQ[g]),sprintf("%.2f",covR[g]),span[g] >> "01_marcadores/revision.tsv"
+        total=split(systemList[g],sets,",")
+        for(i=1;i<=total;i++) print sample,sets[i],g,acc[g],id,location[id],left[id],right[id],strand[id],"no_asignado",sprintf("%.2f",ident[g]),sprintf("%.2f",covR[g]),sprintf("%.2f",covQ[g]),"NA",span[g],status >> "coincidencias.tsv"
         continue
       }
       p=3*(startAA[g]-1);nt=substr(dna,p+1)
@@ -194,14 +198,9 @@ for i in "${!samples[@]}"; do
       for(j=0;j<basesCompared;j++) if(substr(dna,qnt+j,1)==substr(referenceDNA[g],rnt+j,1)) dnaMatches++
       status=(ident[g]==100 && covQ[g]==100 && covR[g]==100?"identica":"probable")
       if(covQ[g]<100 || covR[g]<100) status="probable_cobertura_parcial"
-      print sample,g,acc[g],location[id],a,b,strand[id],id,kind,systemList[g],sprintf("%.2f",ident[g]),sprintf("%.2f",covR[g]),sprintf("%.2f",100*dnaMatches/basesCompared),sprintf("%.2f",covQ[g]),span[g],status >> "01_marcadores/hallazgos.tsv"
-      print sample,g,nt >> "tmp/alelos.tsv"
       total=split(systemList[g],sets,",")
-      for(i=1;i<=total;i++){
-        path="01_marcadores/secuencias/" sets[i] ".fna"
-        print ">" sample "|" g "|" id "|" location[id] ":" a "-" b "(" strand[id] ")" >> path
-        for(j=1;j<=length(nt);j+=80) print substr(nt,j,80) >> path
-      }
+      for(i=1;i<=total;i++) print sample,sets[i],g,acc[g],id,location[id],a,b,strand[id],kind,sprintf("%.2f",ident[g]),sprintf("%.2f",covR[g]),sprintf("%.2f",covQ[g]),sprintf("%.2f",100*dnaMatches/basesCompared),span[g],status >> "coincidencias.tsv"
+      print sample,g,nt >> "tmp/alelos.tsv"
     }
   }
   /^>/{if(id!="")process();split(substr($0,2),header," ");id=header[1];dna="";next}
@@ -209,66 +208,58 @@ for i in "${!samples[@]}"; do
   END{if(id!="")process()}' "${files[0]}/orf.fna"
   rm -rf -- "tmp/$sample"
 done
-awk -F '\t' -v choice="$choice" -v catfile="$catalog" '
-BEGIN{
- OFS="\t"; matrix="01_marcadores/matriz.tsv"; systems="sistemas.tsv"; variants="variacion.tsv"
- getline < catfile
- while((getline < catfile)>0){
-   genes[++ng]=$1; n=split($2,parts,",")
-   for(i=1;i<=n;i++){s=parts[i]; if(!(s in size)) order[++ns]=s; size[s]++; member[s,$1]=1}
- }
- close(catfile); getline < "muestras.tsv"
- while((getline < "muestras.tsv")>0) samples[++nm]=$1
- close("muestras.tsv")
-}
-{ key=$1 SUBSEP $2; copies[key]++
-  if(!(key in dna)) dna[key]=$3; else if(dna[key]!=$3) mixed[key]=1
-}
+if [[ $choice == 2 && ${#samples[@]} -lt 2 ]]; then
+  echo 'Para comparar variantes se requieren al menos dos muestras.' >&2
+  exit 2
+fi
+sorted=$(mktemp)
+{ head -n 1 coincidencias.tsv; tail -n +2 coincidencias.tsv | sort -t $'\t' -k2,2 -k1,1 -k3,3; } > "$sorted"
+mv -- "$sorted" tmp/coincidencias_todas.tsv
+awk -F '\t' -v total="$(awk 'END{print NR-1}' "$catalog")" '
+BEGIN{OFS="\t"; print "muestra","proteinas_asignadas","proteinas_en_catalogo","asignadas_pct","candidatos_revision"}
+NR>1 {key=$1 SUBSEP $3; if($16=="revisar" || $16=="ambiguo") review[key]=1; else assigned[key]=1; samples[$1]=1}
 END{
- printf "muestra" > matrix
- for(g=1;g<=ng;g++) printf "\t%s",genes[g] > matrix
- print "" > matrix
- if(choice==1 || choice==3) print "muestra","sistema","detectados","esperados","genes_detectados","componentes_pct" > systems
- for(i=1;i<=nm;i++){
-   m=samples[i]; found=0;printf "%s",m > matrix
-   for(g=1;g<=ng;g++){v=copies[m,genes[g]]+0; printf "\t%d",v > matrix;found+=(v>0)}
-   print "" > matrix; print m,found "/" ng " marcadores",sprintf("%.2f%%",100*found/ng)
-   if(choice==1 || choice==3) for(z=1;z<=ns;z++){
-     s=order[z];count=0;names=""
-     for(g=1;g<=ng;g++) if(member[s,genes[g]] && copies[m,genes[g]]){
-       count++;names=names (names?",":"") genes[g]
-     }
-     print m,s,count,size[s],(names?names:"."),sprintf("%.2f",100*count/size[s]) > systems
-   }
- }
- if(choice==1 || choice==4){
-   print "muestra_A","muestra_B","gen","resultado" > variants
-   for(i=1;i<=nm;i++) for(j=i+1;j<=nm;j++) for(g=1;g<=ng;g++){
-     a=samples[i] SUBSEP genes[g]; b=samples[j] SUBSEP genes[g]
-     if(!copies[a] || !copies[b]) state="no_evaluable"
-     else if(mixed[a] || mixed[b]) state="multiples_alelos"
-     else state=(dna[a]==dna[b]?"identico":"diferente")
-     print samples[i],samples[j],genes[g],state > variants
-   }
- }
-}' tmp/alelos.tsv | tee resumen.tsv
-printf '[3/3] Matrices, tablas por sistema y secuencias FASTA generadas.\n'
-if [[ -f sistemas.tsv ]]; then mkdir 02_sistemas; mv sistemas.tsv 02_sistemas/; fi
-if [[ -f variacion.tsv ]]; then mkdir 03_variacion; mv variacion.tsv 03_variacion/; fi
-mkdir por_muestra
-while IFS=$'\t' read -r name original; do
-  dir="por_muestra/$name"; mkdir -p -- "$dir/secuencias"
-  for table in 01_marcadores/hallazgos.tsv 01_marcadores/revision.tsv 02_sistemas/sistemas.tsv; do
-    [[ -f $table ]] || continue
-    awk -F '\t' -v name="$name" 'NR==1 || $1==name' "$table" > "$dir/${table##*/}"
-  done
-done < <(tail -n +2 muestras.tsv)
-for fasta in 01_marcadores/secuencias/*.fna; do
-  [[ -f $fasta ]] || continue
-  awk -v file="${fasta##*/}" '/^>/{if(out)close(out); split(substr($0,2),h,"[|]");out="por_muestra/" h[1] "/secuencias/" file} {print >> out}' "$fasta"
-done
+  while((getline line < "muestras.tsv")>0){
+    if(line !~ /^id\t/){split(line,f,"\t");sample=f[1];a=0;r=0
+      for(k in assigned)if(index(k,sample SUBSEP)==1)a++
+      for(k in review)if(index(k,sample SUBSEP)==1)r++
+      print sample,a,total,sprintf("%.2f",100*a/total),r
+    }
+  }
+}' tmp/coincidencias_todas.tsv | tee resumen.tsv
+mkdir -p por_cepa
+while IFS=$'\t' read -r sample original; do
+  [[ $sample == id ]] && continue
+  mkdir -p -- "por_cepa/$sample"
+  awk -F '\t' -v sample="$sample" 'NR==1 || $1==sample' tmp/coincidencias_todas.tsv > "por_cepa/$sample/coincidencias.tsv"
+done < muestras.tsv
+if [[ $choice == 2 ]]; then
+  awk -F '\t' -v catfile="$catalog" '
+  BEGIN{
+    OFS="\t"; variants="variantes.tsv"
+    getline < catfile
+    while((getline < catfile)>0) genes[++ng]=$1
+    close(catfile)
+    getline < "muestras.tsv"
+    while((getline < "muestras.tsv")>0){split($0,f,"\t");samples[++nm]=f[1]}
+    close("muestras.tsv")
+  }
+  {key=$1 SUBSEP $2;copies[key]++;if(!(key in dna))dna[key]=$3;else if(dna[key]!=$3)mixed[key]=1}
+  END{
+    print "muestra_A","muestra_B","proteina","estado" > variants
+    for(i=1;i<=nm;i++)for(j=i+1;j<=nm;j++)for(g=1;g<=ng;g++){
+      a=samples[i] SUBSEP genes[g];b=samples[j] SUBSEP genes[g]
+      if(!copies[a]||!copies[b])state="no_evaluable"
+      else if(mixed[a]||mixed[b])state="multiples_alelos"
+      else state=(dna[a]==dna[b]?"identico":"diferente")
+      print samples[i],samples[j],genes[g],state > variants
+    }
+  }' tmp/alelos.tsv
+fi
+printf '[3/3] Tablas de coincidencias separadas por cepa y ordenadas por sistema.\n'
 rm -rf -- tmp
-printf 'tiempo_segundos\t%s\n' "$SECONDS" | tee -a resumen.tsv
+printf 'Tiempo total: %s s\n' "$SECONDS"
 printf 'Resultados: %s\n' "$run"
-printf '  %s\n' */ resumen.tsv muestras.tsv
+printf '  por_cepa/CEPA/coincidencias.tsv\n  resumen.tsv\n  muestras.tsv\n'
+[[ $choice != 2 ]] || printf '  variantes.tsv\n'
 complete=1
