@@ -10,7 +10,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 url=https://raw.githubusercontent.com/AmaruAM/ORF-FINDER-/main/ORF_Scout.zip
 wget -nv -O "$tmp/ORF_Scout.zip" "$url"
-(cd "$tmp" && printf '%s  ORF_Scout.zip\n' '9780337c76c1383981912277c46eef338efde54c75ad80d4a019a65218a9847f' | sha256sum -c - && unzip -q ORF_Scout.zip)
+(cd "$tmp" && printf '%s  ORF_Scout.zip\n' '9b531a6366b8ad08b2d15b1e0fb8346681b9476b651a60dcae13f96556d9dbdc' | sha256sum -c - && unzip -q ORF_Scout.zip)
 mkdir -p -- "$dest"/{scripts/catalogo,guias,corridas}
 for script in orf_scout.sh starvation_scout.sh; do
   install -m 755 -- "$tmp/ORF_Scout/$script" "$dest/scripts/$script"
