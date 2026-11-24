@@ -214,7 +214,7 @@ if [[ $choice == 2 && ${#samples[@]} -lt 2 ]]; then
 fi
 sorted=$(mktemp)
 { head -n 1 coincidencias.tsv; tail -n +2 coincidencias.tsv | sort -t $'\t' -k2,2 -k1,1 -k3,3; } > "$sorted"
-mv -- "$sorted" coincidencias.tsv
+mv -- "$sorted" tmp/coincidencias_todas.tsv
 awk -F '\t' -v total="$(awk 'END{print NR-1}' "$catalog")" '
 BEGIN{OFS="\t"; print "muestra","proteinas_asignadas","proteinas_en_catalogo","asignadas_pct","candidatos_revision"}
 NR>1 {key=$1 SUBSEP $3; if($16=="revisar" || $16=="ambiguo") review[key]=1; else assigned[key]=1; samples[$1]=1}
@@ -226,7 +226,14 @@ END{
       print sample,a,total,sprintf("%.2f",100*a/total),r
     }
   }
-}' coincidencias.tsv | tee resumen.tsv
+}' tmp/coincidencias_todas.tsv | tee resumen.tsv
+mkdir -p por_cepa
+while IFS=$'\t' read -r sample original; do
+  [[ $sample == id ]] && continue
+  mkdir -p -- "por_cepa/$sample"
+  awk -F '\t' -v sample="$sample" 'NR==1 || $1==sample' tmp/coincidencias_todas.tsv > "por_cepa/$sample/coincidencias.tsv"
+done < muestras.tsv
+rm -f -- coincidencias.tsv
 if [[ $choice == 2 ]]; then
   awk -F '\t' -v catfile="$catalog" '
   BEGIN{
@@ -250,10 +257,10 @@ if [[ $choice == 2 ]]; then
     }
   }' tmp/alelos.tsv
 fi
-printf '[3/3] Tabla de coincidencias ordenada por sistema.\n'
+printf '[3/3] Tablas de coincidencias separadas por cepa y ordenadas por sistema.\n'
 rm -rf -- tmp
 printf 'Tiempo total: %s s\n' "$SECONDS"
 printf 'Resultados: %s\n' "$run"
-printf '  coincidencias.tsv\n  resumen.tsv\n'
+printf '  por_cepa/CEPA/coincidencias.tsv\n  resumen.tsv\n  muestras.tsv\n'
 [[ $choice != 2 ]] || printf '  variantes.tsv\n'
 complete=1
