@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ORF-Scout: prototipo para ensamblajes bacterianos con tabla de traducción 11.
+# ORF-Scout: predicción de ORF bacterianos y composición genómica.
 set -euo pipefail
 export LC_ALL=C
 if [[ ${1:-} == --help ]]; then
@@ -63,11 +63,12 @@ if (($# == 0)); then
     cp -- "$file" "$run/genomas/$name"
     printf '%s\t%s\n' "${name%.fna}" "${taken[$name]}" >> "$run/muestras.tsv"
   done
-  bash "$self" --muestras "$run/orf" "$opt" "$ini" "$run"/genomas/*.fna
-  read -r -p '¿Anotar ahora los ORF de este grupo? [S/n]: ' answer || answer=n
-  case ${answer:-s} in
-    s|S|si|sí|SI|Sí) bash "$base/starvation_scout.sh" --orf "$run/orf" "$run/anotaciones" 1 ;;
-    *) printf 'Para anotar después: bash %q --orf %q %q 1\n' "$base/starvation_scout.sh" "$run/orf" "$run/anotaciones" ;;
+  printf '[1/3] Entradas copiadas y listas. Muestras: %d.\n' "${#inputs[@]}"
+  bash "$self" --muestras "$run/ORF" "$opt" "$ini" "$run"/genomas/*.fna
+  read -r -p '¿Anotar ahora los ORF de este grupo? [s/N]: ' answer || answer=n
+  case ${answer:-n} in
+    s|S|si|sí|SI|Sí) bash "$base/starvation_scout.sh" --orf "$run/ORF" "$run/Starvation" 1 ;;
+    *) printf 'ORF-Scout terminó. Para iniciar la anotación después, ejecuta:\n  bash %q --orf %q %q 1\n' "$base/starvation_scout.sh" "$run/ORF" "$run/Starvation" ;;
   esac
   printf 'Corrida guardada en %s\n' "$run"
   exit
@@ -88,7 +89,9 @@ if [[ ${1:-} == --muestras || ${1:-} == --lote ]]; then
     [[ ! ${names[$name]+x} && ! -e "$parent/$name" ]] || { echo "Nombre repetido o salida existente: $name. Usa nombres distintos." >&2; exit 2; }
     paths+=("$abs"); names[$name]=1
   done
+  printf '[2/3] Entradas validadas. Procesando %d genomas en paralelo...\n' "${#paths[@]}"
   printf '%s\0' "${paths[@]}" | xargs -0 -n 1 -P "$jobs" bash -c 'bash "$1" "$5" "$2" "$3" "$4"' _ "$self" "$parent" "$choice" "$mode"
+  printf '[OK] Etapa de ORF terminada para %d muestras.\n' "${#paths[@]}"
   printf 'Resultados por genoma: %s\n' "$(realpath -- "$parent")"
   exit
 fi
@@ -123,6 +126,7 @@ trap 'exit 143' TERM
 SECONDS=0
 cd -- "$run"
 mkdir 01_orf
+printf '[1/4] Validando ensamblaje y preparando búsqueda de ORF: %s\n' "$(basename -- "$input")"
 awk -v mode="$mode" '
 function fail(msg) {bad=1; print msg > "/dev/stderr"; exit 1}
 function revcomp(s,    i,t) {
@@ -201,8 +205,36 @@ END {
   print "orf_candidatos",count+0
   print "gc_ensamblaje_pct",sprintf("%.8f",100*global_gc/canonical)
 }' "$input" > resumen.tsv
+awk '
+BEGIN {
+  bases="TCAG"; amino="FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"
+  n=0
+  for(i=1;i<=4;i++) for(j=1;j<=4;j++) for(k=1;k<=4;k++) code[substr(bases,i,1) substr(bases,j,1) substr(bases,k,1)]=substr(amino,++n,1)
+  print "" > "01_orf/orf.faa"
+}
+/^>/ {
+  if(header!="") emit()
+  header=substr($0,2); sequence=""; next
+}
+{gsub(/[[:space:]]/,""); sequence=sequence toupper($0)}
+function emit(  i,codon,protein) {
+  protein=""
+  for(i=1;i+2<=length(sequence);i+=3){
+    codon=substr(sequence,i,3)
+    if(!(codon in code) || code[codon]=="*") break
+    protein=protein code[codon]
+  }
+  if(length(protein)){
+    if(substr(sequence,1,3)=="ATG" || substr(sequence,1,3)=="GTG" || substr(sequence,1,3)=="TTG" || substr(sequence,1,3)=="CTG" || substr(sequence,1,3)=="ATT" || substr(sequence,1,3)=="ATC" || substr(sequence,1,3)=="ATA") protein="M" substr(protein,2)
+    print ">" header >> "01_orf/orf.faa"
+    for(i=1;i<=length(protein);i+=60) print substr(protein,i,60) >> "01_orf/orf.faa"
+  }
+}
+END{if(header!="") emit()}' 01_orf/orf.fna
+printf '[2/4] ORF candidatos: %s. Se guardaron secuencias de ADN y proteína.\n' "$(awk -F '\t' '$1=="orf_candidatos"{print $2}' resumen.tsv)"
 printf 'opcion\t%s\nmodo_inicios\t%s\nmin_orf_pb\t150\n' "$choice" "$mode" >> resumen.tsv
 if [[ $choice == 1 || $choice == 3 ]]; then
+  printf '[3/4] Agrupando ORF vecinos como posibles operones...\n'
   mkdir 02_operones
   printf 'grupo\tcontig\thebra\torf_orden_genomico\tdistancias_pb\n' > 02_operones/grupos.tsv
   # Seleccionar vecinos compatibles, priorizando ORF largos en zonas solapadas.
@@ -236,6 +268,7 @@ if [[ $choice == 1 || $choice == 3 ]]; then
     END{flush();print "posibles_operones",groups+0;print "orf_en_grupos",members+0}' >> resumen.tsv
 fi
 if [[ $choice == 1 || $choice == 4 ]]; then
+  printf '[4/4] Comparando GC de los ORF con el ensamblaje...\n'
   mkdir 03_gc
   awk -F '\t' 'NR>1 && $6>=300 {print $8}' 01_orf/orf.tsv | sort -n > gc_ordenado.tmp
   genome=$(awk -F '\t' '$1=="gc_ensamblaje_pct"{print $2}' resumen.tsv)
